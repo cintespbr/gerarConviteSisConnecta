@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gerador de Convites – SisConec.TA 2026</title>
+  <style>
+    body { 
+      font-family: Arial, sans-serif; 
+      margin: 0; 
+      background: #f8f9fa; 
+    }
+    header { 
+      background: #2c3e50; 
+      color: white; 
+      padding: 15px 30px; 
+      display: flex; 
+      justify-content: space-between; 
+      align-items: center; 
+    }
+    h1 { margin: 0; font-size: 1.6em; }
+    .tabs { 
+      display: flex; 
+      gap: 6px; 
+      margin: 0 30px; 
+    }
+    .tab { 
+      padding: 12px 24px; 
+      background: #34495e; 
+      cursor: pointer; 
+      border-radius: 6px 6px 0 0; 
+      font-weight: bold; 
+    }
+    .tab.active { 
+      background: #ecf0f1; 
+      color: #2c3e50; 
+    }
+    .tab:hover { background: #4b6a8a; }
+    .content { 
+      padding: 30px; 
+      max-width: 1200px; 
+      margin: 0 auto; 
+    }
+    .hidden { display: none; }
+    button { 
+      padding: 12px 28px; 
+      font-size: 1.05em; 
+      border: none; 
+      border-radius: 6px; 
+      cursor: pointer; 
+      margin: 8px 12px 8px 0; 
+    }
+    .btn-primary   { background: #2980b9; color: white; }
+    .btn-success   { background: #27ae60; color: white; }
+    .btn-warning   { background: #e67e22; color: white; }
+    .btn-purple    { background: #8e44ad; color: white; }
+    input, select, textarea { 
+      padding: 10px; 
+      width: 100%; 
+      max-width: 420px; 
+      margin: 6px 0 14px 0; 
+      border: 1px solid #ccc; 
+      border-radius: 5px; 
+      box-sizing: border-box; 
+    }
+    table { 
+      width: 100%; 
+      border-collapse: collapse; 
+      margin: 20px 0; 
+      background: white; 
+    }
+    th, td { 
+      border: 1px solid #ddd; 
+      padding: 10px; 
+      text-align: left; 
+    }
+    th { background: #ecf0f1; }
+    .preview-box { 
+      margin-top: 24px; 
+      padding: 24px; 
+      background: white; 
+      border: 1px solid #bdc3c7; 
+      border-radius: 8px; 
+      min-height: 320px; 
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08); 
+    }
+    .rapido-preview-iframe-wrap {
+      width: 100%;
+      max-height: 90vh;
+      overflow: auto;
+      background: #e9ecef;
+      border-radius: 6px;
+      margin-top: 1rem;
+    }
+    .rapido-preview-iframe-wrap iframe {
+      width: 210mm;
+      min-height: 297mm;
+      border: none;
+      display: block;
+    }
+    .rapido-preview-placeholder {
+      padding: 2rem;
+      text-align: center;
+      color: #7f8c8d;
+      font-size: 0.95rem;
+    }
+    .status-gerado { color: #27ae60; }
+    .status-pendente { color: #7f8c8d; }
+    .status-erro { color: #e74c3c; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Gerador de Convites – SisConec.TA 2026</h1>
+  <div class="tabs">
+    <div class="tab active" data-tab="lote">Lote – Planilha</div>
+    <div class="tab" data-tab="rapido">Convite Rápido</div>
+    <div class="tab" data-tab="log">Log & Pendências</div>
+  </div>
+</header>
+
+<div class="content">
+
+  <!-- Aba 1: Lote – Planilha -->
+  <div id="lote" class="tab-content">
+    <h2>Modo Lote – Trabalhar com planilha</h2>
+    
+    <label>1. Escolha a planilha (xlsx ou csv):</label><br>
+    <input type="file" id="xlsxFile" accept=".xlsx,.xls,.csv"><br><br>
+    
+    <button type="button" class="btn-primary" id="btnCarregarPlanilha">Carregar Planilha</button>
+    <button type="button" class="btn-success" id="btnGerarTodos">Gerar Todos (PDF)</button>
+    <button type="button" class="btn-warning" id="btnGerarSelecionados">Gerar Selecionados (PDF)</button>
+    <button type="button" class="btn-primary" id="btnBaixarZip">Baixar ZIP com todos os PDFs</button>
+
+    <h3>Convidados carregados</h3>
+    <table>
+      <thead>
+        <tr>
+          <th><input type="checkbox" id="loteSelectAll" title="Marcar/desmarcar todos"></th>
+          <th>ID</th>
+          <th>Nome</th>
+          <th>Tratamento</th>
+          <th>Instituição</th>
+          <th>Categoria</th>
+          <th>Modelo</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="loteTableBody">
+        <tr>
+          <td colspan="8" style="color:#7f8c8d;">Carregue uma planilha para exibir os convidados.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p style="color:#7f8c8d; font-size:0.95em">
+      Dica: use Ctrl + clique para selecionar vários ou clique no cabeçalho para marcar todos.
+    </p>
+  </div>
+
+  <!-- Aba 2: Convite Rápido -->
+  <div id="rapido" class="tab-content hidden">
+    <h2>Convite de Última Hora</h2>
+    
+    <label>1. Escolha o template de convite:</label>
+    <select id="rapidoTemplateSelect">
+      <option value="">— Selecione um template —</option>
+      <option value="templates/templateAutoridades.html">Modelo 02 – Autoridades e parceiros estratégicos</option>
+    </select>
+    <p id="rapidoTemplateStatus" class="rapido-status" style="display:none; margin-top:4px; font-size:0.9em; color:#7f8c8d;"></p>
+
+    <div id="rapidoFieldsContainer" style="margin-top:20px;">
+      <p style="color:#7f8c8d;">Selecione um template acima para exibir os campos.</p>
+    </div>
+
+    <br><br>
+    <button type="button" class="btn-purple" id="btnGerarRapido" style="font-size:1.2em; padding:16px 36px;" disabled>
+      Gerar e Baixar PDF Agora
+    </button>
+
+    <h3 style="margin-top:2.5rem;">Pré-visualização</h3>
+    <div class="preview-box" id="rapidoPreview">
+      <div id="rapidoPreviewPlaceholder" class="rapido-preview-placeholder">
+        Selecione um template e preencha os campos para visualizar o convite.
+      </div>
+      <div id="rapidoPreviewIframeWrap" class="rapido-preview-iframe-wrap" style="display:none;">
+        <iframe id="rapidoPreviewIframe" title="Pré-visualização do convite"></iframe>
+      </div>
+    </div>
+  </div>
+
+  <!-- Aba 3: Log & Pendências -->
+  <div id="log" class="tab-content hidden">
+    <h2>Registro de Gerações & Pendências</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Data/Hora</th>
+          <th>ID / Nome</th>
+          <th>Modelo</th>
+          <th>Status</th>
+          <th>Arquivo</th>
+        </tr>
+      </thead>
+      <tbody id="logTableBody">
+        <tr>
+          <td colspan="5" style="color:#7f8c8d;">Nenhuma geração nesta sessão.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

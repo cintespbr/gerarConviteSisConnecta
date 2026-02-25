@@ -1,443 +1,91 @@
 /**
- * Gerador de Convites
- * Fluxo: escolher template → preencher manualmente ou via .xlsx → gerar PDFs em .zip
- * Templates são arquivos .html com placeholders {{NOME}}, {{DATA}}, etc.
+ * Gerador de Convites – SisConec.TA 2026
+ * Abas: Lote (planilha), Convite Rápido, Log & Pendências.
  */
-
 (function () {
   'use strict';
 
-  const TEMPLATES = {
-    'templateAutoridades.html': 'Convite Autoridades'
-  };
+  const AUTO_DATE_PLACEHOLDER = 'data em que o convite foi gerado';
+  const isV2 = window.location.pathname.indexOf('/v2') !== -1;
+  const assetPrefix = isV2 ? '../' : '';
 
-  // Fallback quando fetch falha (ex.: abrir index.html por file://)
-  const EMBEDDED_TEMPLATES = {
-    'templates/templateAutoridades.html': '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Ofício – Convite Sisconec.TA 2026</title><style>*{box-sizing:border-box}body{margin:0;min-height:297mm;width:210mm;font-family:Georgia,serif;padding:25mm;color:#222;font-size:12pt;line-height:1.5;background:url(\'../bg.jpg\') center/cover no-repeat}.oficio-header{font-weight:bold;margin-bottom:1.5em}.oficio-data{margin-bottom:2em}.saudacao{margin-bottom:0.5em}.destinatario{margin-bottom:1.5em}.assunto{font-weight:bold;margin-bottom:1.5em}.corpo p{margin:0 0 1em 0;text-align:justify}.url-line{text-align:right;margin-top:2em}</style></head><body><div class="oficio"><p class="oficio-header">OFÍCIO Nº36/2026 – SIsLAB/Rede SisAssistiva</p><p class="oficio-data">Uberlândia, {{data em que o convite foi gerado}}</p><p class="saudacao">Prezado {{Tratamento}}.</p><p class="destinatario">{{Nome Completo}}</p><p class="destinatario">{{Cargo}} - {{Instituição}}</p><p class="assunto">Assunto: Convite para participação no Sisconec.TA 2026</p><div class="corpo"><p>É com satisfação que o SIsLAB – Laboratório Integrador da Rede SisAssistiva em articulação com o Ministério da Ciência, Tecnologia e Inovação (MCTI), por meio da Secretaria de Ciência e Tecnologia para o Desenvolvimento Social – SEDES, convida {{Tratamento}} para participar do Sisconec.TA 2026 – Evento Nacional de Inovação Tecnológica Assistiva, que acontecerá nos dias 20 e 21 de março de 2026 na Arena Sabiazinho, localizada em Uberlândia/MG.</p><p>O Sisconec.TA 2026 será um evento voltado à apresentação das inovações apoiadas pelo Edital FINEP 2022 – Tecnologia Assistiva, com foco na articulação de parcerias e na efetiva transferência das tecnologias desenvolvidas pela Rede para a sociedade. O encontro dará visibilidade aos projetos e promoverá diálogo com agências de fomento, como a FINEP, além de representantes da indústria e do poder público, visando ampliar o acesso da população às soluções geradas no âmbito da Rede SisAssistiva.</p><p class="url-line">As inscrições deverão ser realizadas por meio do hotsite oficial do evento: https://sisconec-ta.cintespbr.org/</p></div></div></body></html>'
-  };
+  var EMBEDDED_TEMPLATE = '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"/><title>Ofício – Sisconec.TA 2026</title><style>*{box-sizing:border-box}body{margin:0;min-height:297mm;width:210mm;font-family:Georgia,serif;padding:25mm;color:#222;font-size:12pt;line-height:1.5}.oficio-header{font-weight:bold;margin-bottom:1.5em}.oficio-data{margin-bottom:2em}.saudacao{margin-bottom:0.5em}.destinatario{margin-bottom:1.5em}.assunto{font-weight:bold;margin-bottom:1.5em}.corpo p{margin:0 0 1em 0;text-align:justify}.url-line{text-align:right;margin-top:2em}</style></head><body><div class="oficio"><p class="oficio-header">OFÍCIO Nº36/2026 – SIsLAB/Rede SisAssistiva</p><p class="oficio-data">Uberlândia, {{data em que o convite foi gerado}}</p><p class="saudacao">Prezado {{Tratamento}}.</p><p class="destinatario">{{Nome Completo}} <br><i> {{Cargo}} - {{Instituição}}</i></p><p class="assunto">Assunto: Convite para participação no Sisconec.TA 2026</p><div class="corpo"><p>É com satisfação que o SIsLAB – Laboratório Integrador da Rede SisAssistiva em articulação com o Ministério da Ciência, Tecnologia e Inovação (MCTI), por meio da Secretaria de Ciência e Tecnologia para o Desenvolvimento Social – SEDES, convida {{Tratamento}} para participar do Sisconec.TA 2026 – Evento Nacional de Inovação Tecnológica Assistiva, que acontecerá nos dias 20 e 21 de março de 2026 na Arena Sabiazinho, localizada em Uberlândia/MG.</p><p>O Sisconec.TA 2026 será um evento voltado à apresentação das inovações apoiadas pelo Edital FINEP 2022 – Tecnologia Assistiva, com foco na articulação de parcerias e na efetiva transferência das tecnologias desenvolvidas pela Rede para a sociedade.</p><p class="url-line">As inscrições deverão ser realizadas por meio do hotsite oficial do evento: https://sisconec-ta.cintespbr.org/</p></div></div></body></html>';
 
   let templateHtml = null;
-  let placeholderNames = []; // campos esperados pelo template (extraídos do HTML)
-  let dataRows = [];
-  let currentDataSource = 'manual';
-  let manualRowCount = 0;
-  const AUTO_DATE_PLACEHOLDER = 'data em que o convite foi gerado';
-  let xlsxAllRows = [];
-  let xlsxSelectedIndices = new Set();
+  let loteRows = [];
+  let logEntries = [];
 
   const el = {
-    templateSelect: document.getElementById('templateSelect'),
-    templateStatus: document.getElementById('templateStatus'),
-    templatePlaceholders: document.getElementById('templatePlaceholders'),
-    dataSourceHint: document.getElementById('dataSourceHint'),
-    manualFieldsContainer: document.getElementById('manualFieldsContainer'),
-    manualActions: document.getElementById('manualActions'),
-    addManualRow: document.getElementById('addManualRow'),
+    tabs: document.querySelectorAll('.tab[data-tab]'),
+    tabContents: document.querySelectorAll('.tab-content'),
     xlsxFile: document.getElementById('xlsxFile'),
-    xlsxPreview: document.getElementById('xlsxPreview'),
-    xlsxPreviewContent: document.getElementById('xlsxPreviewContent'),
-    xlsxRecordList: document.getElementById('xlsxRecordList'),
-    xlsxSelectAll: document.getElementById('xlsxSelectAll'),
-    btnGenerate: document.getElementById('btnGenerate'),
-    generateStatus: document.getElementById('generateStatus'),
-    renderContainer: document.getElementById('renderContainer'),
+    btnCarregarPlanilha: document.getElementById('btnCarregarPlanilha'),
+    btnGerarTodos: document.getElementById('btnGerarTodos'),
+    btnGerarSelecionados: document.getElementById('btnGerarSelecionados'),
+    btnBaixarZip: document.getElementById('btnBaixarZip'),
+    loteSelectAll: document.getElementById('loteSelectAll'),
+    loteTableBody: document.getElementById('loteTableBody'),
+    rapidoTemplateSelect: document.getElementById('rapidoTemplateSelect'),
+    rapidoTemplateStatus: document.getElementById('rapidoTemplateStatus'),
+    rapidoFieldsContainer: document.getElementById('rapidoFieldsContainer'),
+    btnGerarRapido: document.getElementById('btnGerarRapido'),
+    rapidoPreviewPlaceholder: document.getElementById('rapidoPreviewPlaceholder'),
+    rapidoPreviewIframeWrap: document.getElementById('rapidoPreviewIframeWrap'),
+    rapidoPreviewIframe: document.getElementById('rapidoPreviewIframe'),
+    logTableBody: document.getElementById('logTableBody'),
   };
 
-  // --- Extrair placeholders do HTML do template: {{NOME}} -> ['NOME', ...]
-  function extractPlaceholders(html) {
-    const set = new Set();
-    const re = /\{\{([^}]+)\}\}/g;
-    let m;
-    while ((m = re.exec(html)) !== null) set.add(m[1].trim());
-    return Array.from(set);
+  let rapidoTemplateHtml = null;
+  let rapidoPlaceholderNames = [];
+
+  // --- Abas
+  function showTab(tabId) {
+    el.tabs.forEach(function (t) {
+      t.classList.toggle('active', t.getAttribute('data-tab') === tabId);
+    });
+    el.tabContents.forEach(function (c) {
+      c.classList.toggle('hidden', c.id !== tabId);
+    });
   }
 
-  // --- Carregar template ao selecionar
-  el.templateSelect.addEventListener('change', function () {
-    const file = this.value;
-    if (!file) {
-      templateHtml = null;
-      placeholderNames = [];
-      showStatus(el.templateStatus, '', '');
-      el.templatePlaceholders.textContent = '';
-      el.templatePlaceholders.classList.add('hide');
-      el.dataSourceHint.classList.remove('hide');
-      el.manualFieldsContainer.innerHTML = '<p class="template-placeholders">Selecione um template para exibir os campos.</p>';
-      el.manualActions.classList.add('hide');
-      dataRows = [];
-      updateGenerateButton();
+  el.tabs.forEach(function (tab) {
+    tab.addEventListener('click', function () {
+      showTab(tab.getAttribute('data-tab'));
+    });
+  });
+
+  // --- Carregar template (Modelo 02 – Autoridades)
+  function loadTemplate(callback) {
+    if (templateHtml) {
+      callback(null, templateHtml);
       return;
     }
-
-    showStatus(el.templateStatus, 'Carregando template...', 'info');
-    fetch(file)
+    var url = assetPrefix + 'templates/templateAutoridades.html';
+    fetch(url)
       .then(function (r) {
-        if (!r.ok) throw new Error('Arquivo não encontrado (' + r.status + ')');
+        if (!r.ok) throw new Error('Template não encontrado');
         return r.text();
       })
       .then(function (html) {
-        var names = extractPlaceholders(html);
-        if (names.length === 0) {
-          // Resposta não é o template (ex.: página de erro); usar cópia embutida
-          var embedded = EMBEDDED_TEMPLATES[file];
-          if (embedded) {
-            html = embedded;
-            names = extractPlaceholders(embedded);
-          }
-        }
         templateHtml = html;
-        placeholderNames = names;
-        showStatus(el.templateStatus, 'Template carregado. Campos: ' + placeholderNames.join(', '), 'success');
-        el.templatePlaceholders.textContent = 'Campos esperados: ' + placeholderNames.join(', ');
-        el.templatePlaceholders.classList.remove('hide');
-        el.dataSourceHint.classList.add('hide');
-        manualRowCount = 0;
-        buildManualForm();
-        updateGenerateButton();
+        callback(null, html);
       })
       .catch(function (err) {
-        var embedded = EMBEDDED_TEMPLATES[file];
-        if (embedded) {
-          templateHtml = embedded;
-          placeholderNames = extractPlaceholders(embedded);
-          showStatus(el.templateStatus, 'Template carregado (cópia local). Campos: ' + placeholderNames.join(', '), 'success');
-          el.templatePlaceholders.textContent = 'Campos esperados: ' + placeholderNames.join(', ');
-          el.templatePlaceholders.classList.remove('hide');
-          el.dataSourceHint.classList.add('hide');
-          manualRowCount = 0;
-          buildManualForm();
-          updateGenerateButton();
+        if (EMBEDDED_TEMPLATE) {
+          templateHtml = EMBEDDED_TEMPLATE;
+          callback(null, EMBEDDED_TEMPLATE);
         } else {
-          templateHtml = null;
-          placeholderNames = [];
-          showStatus(el.templateStatus, 'Erro ao carregar template: ' + (err.message || err), 'error');
-          el.manualFieldsContainer.innerHTML = '<p class="template-placeholders">Selecione um template para exibir os campos.</p>';
-          el.manualActions.classList.add('hide');
-          updateGenerateButton();
+          callback(err);
         }
       });
-  });
-
-  // --- Montar formulário manual: um bloco por convite, com um input por placeholder (exceto data automática)
-  function getPlaceholdersForForm() {
-    return placeholderNames.filter(function (n) { return n !== AUTO_DATE_PLACEHOLDER; });
   }
 
-  function buildManualForm() {
-    var namesForForm = getPlaceholdersForForm();
-    if (!namesForForm.length) return;
-    el.manualFieldsContainer.innerHTML = '';
-    el.manualActions.classList.remove('hide');
-
-    for (let r = 0; r < Math.max(1, manualRowCount); r++) {
-      appendManualRow(r);
-    }
-    if (manualRowCount === 0) manualRowCount = 1;
-  }
-
-  function appendManualRow(index) {
-    var namesForForm = getPlaceholdersForForm();
-    const row = document.createElement('div');
-    row.className = 'manual-row';
-    row.setAttribute('data-row-index', index);
-    const title = document.createElement('h4');
-    title.textContent = 'Convite ' + (index + 1);
-    row.appendChild(title);
-
-    const grid = document.createElement('div');
-    grid.className = 'field-grid';
-    namesForForm.forEach(function (name) {
-      const field = document.createElement('div');
-      field.className = 'field';
-      const lbl = document.createElement('label');
-      lbl.textContent = name;
-      lbl.setAttribute('for', 'manual_' + index + '_' + name);
-      const input = document.createElement('input');
-      input.type = 'text';
-      input.id = 'manual_' + index + '_' + name;
-      input.setAttribute('data-row', index);
-      input.setAttribute('data-field', name);
-      field.appendChild(lbl);
-      field.appendChild(input);
-      grid.appendChild(field);
-    });
-    row.appendChild(grid);
-
-    const btnRemove = document.createElement('button');
-    btnRemove.type = 'button';
-    btnRemove.className = 'btn-remove-row';
-    btnRemove.title = 'Remover este convite';
-    btnRemove.textContent = '✕';
-    row.appendChild(btnRemove);
-
-    btnRemove.addEventListener('click', function () {
-      const rows = el.manualFieldsContainer.querySelectorAll('.manual-row');
-      if (rows.length <= 1) return;
-      row.remove();
-      reindexManualRows();
-      updateGenerateButton();
-    });
-
-    el.manualFieldsContainer.appendChild(row);
-    row.querySelector('input').addEventListener('input', updateGenerateButton);
-  }
-
-  function reindexManualRows() {
-    const rows = el.manualFieldsContainer.querySelectorAll('.manual-row');
-    rows.forEach(function (r, i) {
-      r.setAttribute('data-row-index', i);
-      r.querySelector('h4').textContent = 'Convite ' + (i + 1);
-      r.querySelectorAll('input').forEach(function (inp) {
-        inp.setAttribute('data-row', i);
-        inp.id = 'manual_' + i + '_' + inp.getAttribute('data-field');
-      });
-    });
-    manualRowCount = rows.length;
-  }
-
-  el.addManualRow.addEventListener('click', function () {
-    const nextIndex = el.manualFieldsContainer.querySelectorAll('.manual-row').length;
-    manualRowCount = nextIndex + 1;
-    appendManualRow(nextIndex);
-    updateGenerateButton();
-  });
-
-  el.manualFieldsContainer.addEventListener('input', function () {
-    updateGenerateButton();
-  });
-
-  // --- Coletar dados do formulário manual
-  function collectManualData() {
-    dataRows = [];
-    el.manualFieldsContainer.querySelectorAll('.manual-row').forEach(function (row) {
-      const obj = {};
-      let hasValue = false;
-      row.querySelectorAll('input[data-field]').forEach(function (inp) {
-        const key = inp.getAttribute('data-field');
-        const val = (inp.value || '').trim();
-        obj[key] = val;
-        if (val) hasValue = true;
-      });
-      if (hasValue) dataRows.push(obj);
-    });
-    return dataRows;
-  }
-
-  // --- Tabs: Manual | XLSX
-  document.querySelectorAll('#dataSourceTabs .tab').forEach(function (tab) {
-    tab.addEventListener('click', function () {
-      const t = this.getAttribute('data-tab');
-      document.querySelectorAll('#dataSourceTabs .tab').forEach(function (x) {
-        x.classList.toggle('active', x.getAttribute('data-tab') === t);
-      });
-      document.querySelectorAll('.tab-content').forEach(function (c) {
-        if (c.id === 'tab-manual' || c.id === 'tab-xlsx') {
-          c.classList.toggle('active', c.id === 'tab-' + t);
-        }
-      });
-      currentDataSource = t;
-      updateGenerateButton();
-      if (t === 'manual') collectManualData();
-    });
-  });
-
-  // --- Planilha XLSX
-  el.xlsxFile.addEventListener('change', function () {
-    const file = this.files[0];
-    if (!file) {
-      xlsxAllRows = [];
-      xlsxSelectedIndices.clear();
-      dataRows = [];
-      el.xlsxPreview.style.display = 'none';
-      if (el.xlsxRecordList) el.xlsxRecordList.innerHTML = '';
-      updateGenerateButton();
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = function (e) {
-      try {
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-        const json = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
-        if (json.length < 2) {
-          xlsxAllRows = [];
-          xlsxSelectedIndices.clear();
-          dataRows = [];
-          el.xlsxPreviewContent.textContent = 'Planilha vazia ou sem dados (mínimo: cabeçalho + 1 linha).';
-          el.xlsxPreview.style.display = 'block';
-          if (el.xlsxRecordList) el.xlsxRecordList.innerHTML = '';
-        } else {
-          const headers = json[0].map(function (h) { return String(h || '').trim() || 'Coluna'; });
-          xlsxAllRows = json.slice(1).map(function (row) {
-            const obj = {};
-            headers.forEach(function (h, i) {
-              obj[h] = row[i] != null ? String(row[i]).trim() : '';
-            });
-            return obj;
-          });
-          xlsxSelectedIndices.clear();
-          for (var i = 0; i < xlsxAllRows.length; i++) xlsxSelectedIndices.add(i);
-          el.xlsxPreviewContent.textContent = 'Colunas: ' + headers.join(', ') + '\n\nTotal de linhas: ' + xlsxAllRows.length;
-          el.xlsxPreview.style.display = 'block';
-          buildXlsxRecordList();
-      updateDataRowsFromXlsxSelection();
-    }
-    updateGenerateButton();
-    updateXlsxSelectAllLabel();
-  } catch (err) {
-        xlsxAllRows = [];
-        xlsxSelectedIndices.clear();
-        dataRows = [];
-        el.xlsxPreviewContent.textContent = 'Erro: ' + (err.message || err);
-        el.xlsxPreview.style.display = 'block';
-        if (el.xlsxRecordList) el.xlsxRecordList.innerHTML = '';
-        updateGenerateButton();
-      }
-    };
-    reader.readAsArrayBuffer(file);
-  });
-
-  function updateDataRowsFromXlsxSelection() {
-    if (currentDataSource !== 'xlsx') return;
-    dataRows = xlsxAllRows.filter(function (_, i) { return xlsxSelectedIndices.has(i); });
-  }
-
-  function buildXlsxRecordList() {
-    if (!el.xlsxRecordList) return;
-    el.xlsxRecordList.innerHTML = '';
-    xlsxAllRows.forEach(function (row, i) {
-      var nome = getValueForPlaceholder(row, 'Nome Completo');
-      if (!nome || nome.trim() === '') nome = 'Convite ' + (i + 1);
-      var li = document.createElement('li');
-      var label = document.createElement('label');
-      label.className = 'xlsx-record-item';
-      var cb = document.createElement('input');
-      cb.type = 'checkbox';
-      cb.checked = xlsxSelectedIndices.has(i);
-      cb.setAttribute('data-xlsx-index', i);
-      cb.addEventListener('change', function () {
-        var idx = parseInt(this.getAttribute('data-xlsx-index'), 10);
-        if (this.checked) xlsxSelectedIndices.add(idx);
-        else xlsxSelectedIndices.delete(idx);
-        updateDataRowsFromXlsxSelection();
-        updateGenerateButton();
-      });
-      label.appendChild(cb);
-      label.appendChild(document.createTextNode(' ' + nome));
-      li.appendChild(label);
-      el.xlsxRecordList.appendChild(li);
-    });
-    updateXlsxSelectAllLabel();
-  }
-
-  if (el.xlsxSelectAll) {
-    el.xlsxSelectAll.addEventListener('click', function () {
-      var allSelected = xlsxAllRows.length > 0 && xlsxSelectedIndices.size === xlsxAllRows.length;
-      if (allSelected) {
-        xlsxSelectedIndices.clear();
-      } else {
-        xlsxSelectedIndices.clear();
-        for (var i = 0; i < xlsxAllRows.length; i++) xlsxSelectedIndices.add(i);
-      }
-      buildXlsxRecordList();
-      updateDataRowsFromXlsxSelection();
-      updateGenerateButton();
-    });
-  }
-
-  function updateXlsxSelectAllLabel() {
-    if (!el.xlsxSelectAll) return;
-    var allSelected = xlsxAllRows.length > 0 && xlsxSelectedIndices.size === xlsxAllRows.length;
-    el.xlsxSelectAll.textContent = allSelected ? 'Desmarcar todos' : 'Selecionar todos';
-  }
-
-  function updateGenerateButton() {
-    if (currentDataSource === 'manual') collectManualData();
-    else if (currentDataSource === 'xlsx') updateDataRowsFromXlsxSelection();
-    const hasTemplate = !!templateHtml;
-    const hasData = dataRows.length > 0;
-    el.btnGenerate.disabled = !hasTemplate || !hasData;
-    updateGenerateButtonLabel();
-    if (currentDataSource === 'xlsx') updateXlsxSelectAllLabel();
-  }
-
-  function updateGenerateButtonLabel() {
-    if (!el.btnGenerate) return;
-    if (currentDataSource === 'xlsx' && dataRows.length > 0) {
-      el.btnGenerate.textContent = 'Gerar selecionados (' + dataRows.length + ') e baixar .zip';
-    } else {
-      el.btnGenerate.textContent = 'Gerar convites (PDF) e baixar .zip';
-    }
-  }
-
-  // --- Normalizar nome para comparação (maiúsculas, sem acentos)
-  function normalizeKey(str) {
-    if (str == null || str === '') return '';
-    return String(str)
-      .toUpperCase()
-      .trim()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '');
-  }
-
-  function formatDate(d) {
-    var day = ('0' + d.getDate()).slice(-2);
-    var month = ('0' + (d.getMonth() + 1)).slice(-2);
-    return day + '/' + month + '/' + d.getFullYear();
-  }
-
-  // --- Obter valor do row para um placeholder (aceita chave com nome diferente na planilha)
-  function getValueForPlaceholder(row, placeholderName) {
-    if (placeholderName === AUTO_DATE_PLACEHOLDER) {
-      var v = row[placeholderName];
-      if (v === undefined || v === null || String(v).trim() === '') return formatDate(new Date());
-      return v;
-    }
-    var val = row[placeholderName];
-    if (val !== undefined && val !== null) return val;
-    var normPlaceholder = normalizeKey(placeholderName);
-    if (!normPlaceholder) return '';
-    for (var k in row) {
-      if (Object.prototype.hasOwnProperty.call(row, k) && normalizeKey(k) === normPlaceholder)
-        return row[k];
-    }
-    return '';
-  }
-
-  // --- Nome do arquivo PDF a partir do convidado (Nome Completo), com fallback
-  function getFileNameForRow(row, index) {
-    var nome = getValueForPlaceholder(row, 'Nome Completo');
-    if (nome == null) nome = '';
-    nome = String(nome).trim();
-    if (nome) {
-      nome = nome.replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim();
-      if (nome.length > 80) nome = nome.substring(0, 80);
-    }
-    return nome || ('convite_' + (index + 1));
-  }
-
-  // --- Substituir placeholders: {{NOME}} -> valor (usa placeholders do template e normalização)
-  function fillTemplate(html, row) {
-    var out = html;
-    // Primeiro: substituir por cada chave do row (para compatibilidade)
-    Object.keys(row).forEach(function (key) {
-      var placeholder = '{{' + key + '}}';
-      out = out.split(placeholder).join(String(row[key] != null ? row[key] : ''));
-    });
-    // Depois: substituir placeholders que ainda restaram, buscando por nome normalizado
-    var re = /\{\{([^}]+)\}\}/g;
-    out = out.replace(re, function (match, name) {
-      var n = name.trim();
-      return String(getValueForPlaceholder(row, n));
-    });
-    return out;
-  }
-
-  // --- Gerar PDF a partir do HTML completo do template (usa iframe para manter estilos e background)
+  // --- Base URL para imagens (GH Pages subpath)
   function getBaseUrl() {
     var href = window.location.href.replace(/#.*$/, '').replace(/\?.*$/, '');
-    return href.indexOf('/') === -1 ? href : href.substring(0, href.lastIndexOf('/') + 1);
+    var base = href.indexOf('/') === -1 ? href : href.substring(0, href.lastIndexOf('/') + 1);
+    if (isV2) base = base + '../';
+    return base;
   }
 
   function resolveBackgroundUrl(html) {
@@ -446,21 +94,91 @@
     return html.replace(/url\s*\(\s*['"]?(?:\.\.\/)?bg\.jpg['"]?\s*\)/gi, 'url("' + bgUrl + '")');
   }
 
+  // --- Data formatada
+  function formatDate(d) {
+    var day = ('0' + d.getDate()).slice(-2);
+    var month = ('0' + (d.getMonth() + 1)).slice(-2);
+    return day + '/' + month + '/' + d.getFullYear();
+  }
+
+  var MESES_EXTENSO = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+  function formatDateLong(d) {
+    if (!d) d = new Date();
+    var dia = d.getDate();
+    var mes = MESES_EXTENSO[d.getMonth()];
+    var ano = d.getFullYear();
+    return dia + ' de ' + mes + ' de ' + ano;
+  }
+
+  function formatDateTime(d) {
+    return d.getFullYear() + '-' +
+      ('0' + (d.getMonth() + 1)).slice(-2) + '-' +
+      ('0' + d.getDate()).slice(-2) + ' ' +
+      ('0' + d.getHours()).slice(-2) + ':' +
+      ('0' + d.getMinutes()).slice(-2);
+  }
+
+  // --- Normalizar chave (planilha pode ter nomes diferentes)
+  function normalizeKey(str) {
+    if (str == null || str === '') return '';
+    return String(str).toUpperCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  }
+
+  function getValue(row, key) {
+    var val = row[key];
+    if (val !== undefined && val !== null) return val;
+    var n = normalizeKey(key);
+    if (!n) return '';
+    for (var k in row) {
+      if (Object.prototype.hasOwnProperty.call(row, k) && normalizeKey(k) === n) return row[k];
+    }
+    return '';
+  }
+
+  // --- Row para o template: Nome Completo, Tratamento, Cargo, Instituição, data
+  function rowToTemplateData(row) {
+    var nome = String(getValue(row, 'Nome Completo') || getValue(row, 'Nome') || '').trim();
+    var tratamento = String(getValue(row, 'Tratamento') || '').trim();
+    var cargo = String(getValue(row, 'Cargo') || '').trim();
+    var instituicao = String(getValue(row, 'Instituição') || '').trim();
+    return {
+      'Nome Completo': nome,
+      'Tratamento': tratamento,
+      'Cargo': cargo,
+      'Instituição': instituicao,
+      [AUTO_DATE_PLACEHOLDER]: formatDateLong(new Date())
+    };
+  }
+
+  function fillTemplate(html, data) {
+    var out = html;
+    Object.keys(data).forEach(function (key) {
+      var ph = '{{' + key + '}}';
+      out = out.split(ph).join(String(data[key] != null ? data[key] : ''));
+    });
+    var re = /\{\{([^}]+)\}\}/g;
+    out = out.replace(re, function (match, name) {
+      var n = name.trim();
+      if (n === AUTO_DATE_PLACEHOLDER) return formatDateLong(new Date());
+      return String(getValue(data, n) || '');
+    });
+    return out;
+  }
+
   function htmlToPdf(fullHtml) {
     fullHtml = resolveBackgroundUrl(fullHtml);
     return new Promise(function (resolve, reject) {
-      const iframe = document.createElement('iframe');
+      var iframe = document.createElement('iframe');
       iframe.style.cssText = 'position:absolute;left:-9999px;width:210mm;height:297mm;';
       document.body.appendChild(iframe);
-
-      const doc = iframe.contentDocument;
+      var doc = iframe.contentDocument;
       doc.open();
       doc.write(fullHtml);
       doc.close();
 
       function capture() {
-        const body = doc.body;
-        if (!body) return reject(new Error('Iframe body not ready'));
+        var body = doc.body;
+        if (!body) return reject(new Error('Iframe não pronto'));
         html2canvas(body, {
           scale: 2,
           useCORS: true,
@@ -473,17 +191,17 @@
         })
           .then(function (canvas) {
             document.body.removeChild(iframe);
-            const imgData = canvas.toDataURL('image/jpeg', 0.95);
-            const pdf = new jspdf.jsPDF({
+            var imgData = canvas.toDataURL('image/jpeg', 0.95);
+            var pdf = new jspdf.jsPDF({
               orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
               unit: 'mm',
               format: 'a4',
             });
-            const pageW = pdf.internal.pageSize.getWidth();
-            const pageH = pdf.internal.pageSize.getHeight();
-            const ratio = Math.min(pageW / canvas.width, pageH / canvas.height) * 0.95;
-            const w = canvas.width * ratio;
-            const h = canvas.height * ratio;
+            var pageW = pdf.internal.pageSize.getWidth();
+            var pageH = pdf.internal.pageSize.getHeight();
+            var ratio = Math.min(pageW / canvas.width, pageH / canvas.height) * 0.95;
+            var w = canvas.width * ratio;
+            var h = canvas.height * ratio;
             pdf.addImage(imgData, 'JPEG', (pageW - w) / 2, (pageH - h) / 2, w, h);
             resolve(pdf.output('arraybuffer'));
           })
@@ -492,61 +210,431 @@
             reject(err);
           });
       }
-
-      // Aguardar documento e recursos (ex.: bg.jpg) carregarem antes de capturar
-      function waitAndCapture() {
-        setTimeout(capture, 600);
-      }
-      if (doc.readyState === 'complete') {
-        waitAndCapture();
-      } else {
-        iframe.contentWindow.onload = waitAndCapture;
-      }
+      setTimeout(capture, 600);
     });
   }
 
-  // --- Botão Gerar
-  el.btnGenerate.addEventListener('click', async function () {
-    if (currentDataSource === 'manual') collectManualData();
-    if (!templateHtml || dataRows.length === 0) return;
-
-    el.btnGenerate.disabled = true;
-    showStatus(el.generateStatus, 'Gerando ' + dataRows.length + ' convite(s)...', 'info');
-
-    const zip = new JSZip();
-    const folder = zip.folder('convites');
-    const usedNames = {};
-
-    try {
-      for (let i = 0; i < dataRows.length; i++) {
-        const row = dataRows[i];
-        const filledHtml = fillTemplate(templateHtml, row);
-        const pdfBuffer = await htmlToPdf(filledHtml);
-        var baseName = getFileNameForRow(row, i);
-        var fileName = baseName + '.pdf';
-        var count = 1;
-        while (usedNames[fileName]) {
-          count++;
-          fileName = baseName + ' (' + count + ').pdf';
-        }
-        usedNames[fileName] = true;
-        folder.file(fileName, pdfBuffer);
-      }
-      const zipBlob = await zip.generateAsync({ type: 'blob' });
-      saveAs(zipBlob, 'convites.zip');
-      showStatus(el.generateStatus, 'Download iniciado: convites.zip (' + dataRows.length + ' PDFs).', 'success');
-    } catch (err) {
-      showStatus(el.generateStatus, 'Erro ao gerar PDFs: ' + (err.message || err), 'error');
-    } finally {
-      el.btnGenerate.disabled = false;
-      updateGenerateButton();
-    }
-  });
-
-  function showStatus(elm, message, type) {
-    if (!elm) return;
-    elm.textContent = message;
-    elm.className = 'status ' + (type || '');
-    elm.style.display = message ? 'block' : 'none';
+  function addLog(idNome, modelo, status, arquivo) {
+    logEntries.unshift({
+      dt: formatDateTime(new Date()),
+      idNome: idNome,
+      modelo: modelo,
+      status: status,
+      arquivo: arquivo || '—'
+    });
+    renderLog();
   }
+
+  function renderLog() {
+    if (!el.logTableBody) return;
+    el.logTableBody.innerHTML = '';
+    if (logEntries.length === 0) {
+      var tr = document.createElement('tr');
+      tr.innerHTML = '<td colspan="5" style="color:#7f8c8d;">Nenhuma geração nesta sessão.</td>';
+      el.logTableBody.appendChild(tr);
+      return;
+    }
+    logEntries.forEach(function (e) {
+      var tr = document.createElement('tr');
+      if (e.status.indexOf('Erro') !== -1) tr.style.background = '#fff3cd';
+      tr.innerHTML =
+        '<td>' + e.dt + '</td>' +
+        '<td>' + escapeHtml(e.idNome) + '</td>' +
+        '<td>' + escapeHtml(e.modelo) + '</td>' +
+        '<td>' + escapeHtml(e.status) + '</td>' +
+        '<td>' + escapeHtml(e.arquivo) + '</td>';
+      el.logTableBody.appendChild(tr);
+    });
+  }
+
+  function escapeHtml(s) {
+    if (s == null) return '';
+    var div = document.createElement('div');
+    div.textContent = s;
+    return div.innerHTML;
+  }
+
+  // --- Planilha: carregar e preencher tabela
+  function parseFile(file, callback) {
+    var name = (file.name || '').toLowerCase();
+    if (name.endsWith('.csv')) {
+      var reader = new FileReader();
+      reader.onload = function () {
+        try {
+          var text = reader.result;
+          var lines = text.split(/\r?\n/).filter(function (l) { return l.trim(); });
+          if (lines.length < 2) return callback(new Error('CSV precisa de cabeçalho e ao menos uma linha'));
+          var headers = lines[0].split(',').map(function (h) { return h.trim().replace(/^"|"$/g, ''); });
+          var rows = lines.slice(1).map(function (line) {
+            var obj = {};
+            var vals = line.match(/("([^"]*)")|([^,]+)/g) || [];
+            vals = vals.map(function (v) { return (v || '').trim().replace(/^"|"$/g, ''); });
+            headers.forEach(function (h, i) { obj[h] = vals[i] != null ? vals[i] : ''; });
+            return obj;
+          });
+          callback(null, rows);
+        } catch (e) {
+          callback(e);
+        }
+      };
+      reader.readAsText(file, 'UTF-8');
+      return;
+    }
+    var reader = new FileReader();
+    reader.onload = function (e) {
+      try {
+        var data = new Uint8Array(e.target.result);
+        var workbook = XLSX.read(data, { type: 'array' });
+        var sheet = workbook.Sheets[workbook.SheetNames[0]];
+        var json = XLSX.utils.sheet_to_json(sheet);
+        if (!json.length) return callback(new Error('Planilha vazia'));
+        callback(null, json);
+      } catch (err) {
+        callback(err);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function buildLoteTable(rows) {
+    loteRows = rows.map(function (r, i) {
+      return {
+        id: String(i + 1).padStart(3, '0'),
+        row: r,
+        selected: true,
+        modelo: '2',
+        status: 'Não gerado'
+      };
+    });
+    renderLoteTable();
+  }
+
+  function renderLoteTable() {
+    if (!el.loteTableBody) return;
+    el.loteTableBody.innerHTML = '';
+    if (loteRows.length === 0) {
+      var tr = document.createElement('tr');
+      tr.innerHTML = '<td colspan="8" style="color:#7f8c8d;">Carregue uma planilha para exibir os convidados.</td>';
+      el.loteTableBody.appendChild(tr);
+      return;
+    }
+    var allChecked = loteRows.every(function (r) { return r.selected; });
+    if (el.loteSelectAll) el.loteSelectAll.checked = allChecked;
+
+    loteRows.forEach(function (item, idx) {
+      var tr = document.createElement('tr');
+      tr.setAttribute('data-idx', idx);
+      var nome = getValue(item.row, 'Nome Completo') || getValue(item.row, 'Nome') || '';
+      var tratamento = getValue(item.row, 'Tratamento') || '';
+      var instituicao = getValue(item.row, 'Instituição') || '';
+      var categoria = getValue(item.row, 'Categoria') || '';
+      var cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = item.selected;
+      cb.addEventListener('change', function () {
+        item.selected = cb.checked;
+        updateSelectAllState();
+      });
+      var sel = document.createElement('select');
+      sel.innerHTML = '<option value="1">Modelo 01 – Padrão</option><option value="2" selected>Modelo 02 – Autoridades</option><option value="3">Modelo 03 – Rede</option>';
+      sel.value = item.modelo;
+      sel.addEventListener('change', function () { item.modelo = sel.value; });
+      tr.innerHTML =
+        '<td></td>' +
+        '<td>' + escapeHtml(item.id) + '</td>' +
+        '<td>' + escapeHtml(nome) + '</td>' +
+        '<td>' + escapeHtml(tratamento) + '</td>' +
+        '<td>' + escapeHtml(instituicao) + '</td>' +
+        '<td>' + escapeHtml(categoria) + '</td>' +
+        '<td></td>' +
+        '<td class="status-pendente">' + escapeHtml(item.status) + '</td>';
+      tr.querySelector('td').appendChild(cb);
+      tr.querySelectorAll('td')[6].appendChild(sel);
+      el.loteTableBody.appendChild(tr);
+    });
+  }
+
+  function updateSelectAllState() {
+    if (!el.loteSelectAll) return;
+    var allChecked = loteRows.length > 0 && loteRows.every(function (r) { return r.selected; });
+    el.loteSelectAll.checked = allChecked;
+  }
+
+  if (el.loteSelectAll) {
+    el.loteSelectAll.addEventListener('change', function () {
+      var checked = this.checked;
+      loteRows.forEach(function (r) { r.selected = checked; });
+      renderLoteTable();
+    });
+  }
+
+  if (el.xlsxFile) {
+    el.xlsxFile.addEventListener('change', function () {
+      var file = this.files[0];
+      if (!file) return;
+      parseFile(file, function (err, rows) {
+        if (err) {
+          alert('Erro ao ler arquivo: ' + (err.message || err));
+          return;
+        }
+        buildLoteTable(rows);
+      });
+    });
+  }
+
+  if (el.btnCarregarPlanilha) {
+    el.btnCarregarPlanilha.addEventListener('click', function () {
+      el.xlsxFile && el.xlsxFile.click();
+    });
+  }
+
+  function getSelectedLoteRows() {
+    return loteRows.filter(function (r) { return r.selected; });
+  }
+
+  function gerarPdfLote(onlySelected, done) {
+    var rows = onlySelected ? getSelectedLoteRows() : loteRows;
+    if (!rows.length) {
+      alert(onlySelected ? 'Nenhum convite selecionado.' : 'Carregue uma planilha e tenha ao menos um convidado.');
+      if (done) done();
+      return;
+    }
+    loadTemplate(function (err, html) {
+      if (err) {
+        alert('Erro ao carregar template: ' + (err.message || err));
+        if (done) done();
+        return;
+      }
+      var zip = new JSZip();
+      var folder = zip.folder('convites');
+      var usedNames = {};
+      var total = rows.length;
+      var next = 0;
+
+      function doOne() {
+        if (next >= total) {
+          zip.generateAsync({ type: 'blob' }).then(function (blob) {
+            saveAs(blob, 'convites.zip');
+            rows.forEach(function (item) {
+              item.status = 'Gerado';
+              var nome = getValue(item.row, 'Nome Completo') || getValue(item.row, 'Nome') || item.id;
+              addLog(item.id + ' – ' + nome, 'Modelo ' + item.modelo, 'Gerado com sucesso', 'Convite_' + item.id + '.pdf');
+            });
+            renderLoteTable();
+            if (done) done();
+          });
+          return;
+        }
+        var item = rows[next];
+        var data = rowToTemplateData(item.row);
+        var filled = fillTemplate(html, data);
+        htmlToPdf(filled)
+          .then(function (buf) {
+            var nome = (getValue(item.row, 'Nome Completo') || getValue(item.row, 'Nome') || '').trim();
+            var baseName = nome.replace(/[\\/:*?"<>|]/g, '_').substring(0, 80) || ('convite_' + item.id);
+            var fileName = baseName + '.pdf';
+            var c = 1;
+            while (usedNames[fileName]) {
+              fileName = baseName + ' (' + c + ').pdf';
+              c++;
+            }
+            usedNames[fileName] = true;
+            folder.file(fileName, buf);
+            next++;
+            doOne();
+          })
+          .catch(function (err) {
+            addLog(item.id, 'Modelo ' + item.modelo, 'Erro: ' + (err.message || err), '—');
+            item.status = 'Erro';
+            next++;
+            doOne();
+          });
+      }
+      doOne();
+    });
+  }
+
+  if (el.btnGerarTodos) {
+    el.btnGerarTodos.addEventListener('click', function () {
+      this.disabled = true;
+      gerarPdfLote(false, function () { el.btnGerarTodos.disabled = false; });
+    });
+  }
+  if (el.btnGerarSelecionados) {
+    el.btnGerarSelecionados.addEventListener('click', function () {
+      this.disabled = true;
+      gerarPdfLote(true, function () { el.btnGerarSelecionados.disabled = false; });
+    });
+  }
+  if (el.btnBaixarZip) {
+    el.btnBaixarZip.addEventListener('click', function () {
+      this.disabled = true;
+      gerarPdfLote(false, function () { el.btnBaixarZip.disabled = false; });
+    });
+  }
+
+  // --- Convite Rápido: template primeiro, depois campos dinâmicos
+  function extractPlaceholders(html) {
+    var set = {};
+    var re = /\{\{([^}]+)\}\}/g;
+    var m;
+    while ((m = re.exec(html)) !== null) set[m[1].trim()] = true;
+    return Object.keys(set);
+  }
+
+  function getRapidoPlaceholdersForForm() {
+    return rapidoPlaceholderNames.filter(function (n) { return n !== AUTO_DATE_PLACEHOLDER; });
+  }
+
+  function showRapidoStatus(msg, type) {
+    if (!el.rapidoTemplateStatus) return;
+    el.rapidoTemplateStatus.textContent = msg;
+    el.rapidoTemplateStatus.style.display = msg ? 'block' : 'none';
+    el.rapidoTemplateStatus.style.color = type === 'error' ? '#e74c3c' : '#7f8c8d';
+  }
+
+  function buildRapidoForm() {
+    if (!el.rapidoFieldsContainer) return;
+    var names = getRapidoPlaceholdersForForm();
+    if (!names.length) {
+      el.rapidoFieldsContainer.innerHTML = '<p style="color:#7f8c8d;">Nenhum campo editável neste template (ou template não carregado).</p>';
+      el.btnGerarRapido.disabled = true;
+      return;
+    }
+    el.rapidoFieldsContainer.innerHTML = '';
+    names.forEach(function (name) {
+      var isTratamento = name === 'Tratamento';
+      var div = document.createElement('div');
+      div.style.marginBottom = '14px';
+      var label = document.createElement('label');
+      label.textContent = name + (name === 'Nome Completo' || name === 'Instituição' ? ' *' : '');
+      label.style.display = 'block';
+      label.style.marginBottom = '4px';
+      label.style.fontSize = '0.875rem';
+      label.style.color = '#7f8c8d';
+      div.appendChild(label);
+      var input;
+      if (isTratamento) {
+        input = document.createElement('select');
+        input.innerHTML = '<option>Sr(a).</option><option>Prof.</option><option selected>Profa.</option><option>Dr(a).</option><option>Ministro(a)</option><option>Diretor(a)</option>';
+      } else {
+        input = document.createElement('input');
+        input.type = 'text';
+        input.placeholder = 'Ex: ' + (name === 'Nome Completo' ? 'Prof. João da Silva' : name === 'Instituição' ? 'FINEP' : name === 'Cargo' ? 'Coordenador de Inovação' : '');
+      }
+      input.setAttribute('data-field', name);
+      input.style.width = '100%';
+      input.style.maxWidth = '420px';
+      input.style.padding = '10px';
+      input.style.border = '1px solid #ccc';
+      input.style.borderRadius = '5px';
+      input.style.boxSizing = 'border-box';
+      div.appendChild(input);
+      el.rapidoFieldsContainer.appendChild(div);
+    });
+    el.btnGerarRapido.disabled = false;
+    updateRapidoPreview();
+  }
+
+  function updateRapidoPreview() {
+    if (!el.rapidoPreviewIframe || !el.rapidoPreviewIframeWrap || !el.rapidoPreviewPlaceholder) return;
+    if (!rapidoTemplateHtml) {
+      el.rapidoPreviewPlaceholder.style.display = 'block';
+      el.rapidoPreviewIframeWrap.style.display = 'none';
+      return;
+    }
+    el.rapidoPreviewPlaceholder.style.display = 'none';
+    el.rapidoPreviewIframeWrap.style.display = 'block';
+    var data = collectRapidoData();
+    var filled = fillTemplate(rapidoTemplateHtml, data);
+    filled = resolveBackgroundUrl(filled);
+    var iframe = el.rapidoPreviewIframe;
+    var doc = iframe.contentDocument || iframe.contentWindow.document;
+    doc.open();
+    doc.write(filled);
+    doc.close();
+  }
+
+  function collectRapidoData() {
+    var data = {};
+    if (!el.rapidoFieldsContainer) return data;
+    el.rapidoFieldsContainer.querySelectorAll('[data-field]').forEach(function (inp) {
+      var key = inp.getAttribute('data-field');
+      data[key] = (inp.value || '').trim();
+    });
+    data[AUTO_DATE_PLACEHOLDER] = formatDateLong(new Date());
+    return data;
+  }
+
+  if (el.rapidoTemplateSelect) {
+    el.rapidoTemplateSelect.addEventListener('change', function () {
+      var path = this.value;
+      rapidoTemplateHtml = null;
+      rapidoPlaceholderNames = [];
+      el.rapidoFieldsContainer.innerHTML = '<p style="color:#7f8c8d;">Selecione um template acima para exibir os campos.</p>';
+      el.btnGerarRapido.disabled = true;
+      showRapidoStatus('', '');
+      if (!path) return;
+      showRapidoStatus('Carregando template...', '');
+      var url = assetPrefix + path;
+      fetch(url)
+        .then(function (r) {
+          if (!r.ok) throw new Error('Template não encontrado');
+          return r.text();
+        })
+        .then(function (html) {
+          rapidoTemplateHtml = html;
+          rapidoPlaceholderNames = extractPlaceholders(html);
+          showRapidoStatus('Template carregado. Campos: ' + getRapidoPlaceholdersForForm().join(', '), '');
+          buildRapidoForm();
+        })
+        .catch(function (err) {
+          if (path.indexOf('templateAutoridades') !== -1 && EMBEDDED_TEMPLATE) {
+            rapidoTemplateHtml = EMBEDDED_TEMPLATE;
+            rapidoPlaceholderNames = extractPlaceholders(EMBEDDED_TEMPLATE);
+            showRapidoStatus('Template carregado (cópia local).', '');
+            buildRapidoForm();
+          } else {
+            showRapidoStatus('Erro: ' + (err.message || err), 'error');
+            el.rapidoFieldsContainer.innerHTML = '<p style="color:#e74c3c;">Erro ao carregar template. Verifique se está usando um servidor local ou publique no GitHub Pages.</p>';
+          }
+        });
+    });
+  }
+
+  if (el.rapidoFieldsContainer) {
+    el.rapidoFieldsContainer.addEventListener('input', updateRapidoPreview);
+    el.rapidoFieldsContainer.addEventListener('change', updateRapidoPreview);
+  }
+
+  if (el.btnGerarRapido) {
+    el.btnGerarRapido.addEventListener('click', function () {
+      if (!rapidoTemplateHtml) {
+        alert('Selecione um template primeiro.');
+        return;
+      }
+      var data = collectRapidoData();
+      var nome = (data['Nome Completo'] || '').trim();
+      if (!nome) {
+        alert('Preencha o campo Nome Completo.');
+        return;
+      }
+      this.disabled = true;
+      var filled = fillTemplate(rapidoTemplateHtml, data);
+      htmlToPdf(filled)
+        .then(function (buf) {
+          var blob = new Blob([buf], { type: 'application/pdf' });
+          saveAs(blob, 'Convite_' + nome.replace(/[\\/:*?"<>|]/g, '_').substring(0, 60) + '.pdf');
+          addLog(nome, 'Convite Rápido', 'Gerado com sucesso', 'Convite_' + nome.substring(0, 30) + '.pdf');
+          el.btnGerarRapido.disabled = false;
+        })
+        .catch(function (err) {
+          alert('Erro ao gerar PDF: ' + (err.message || err));
+          addLog(nome || '—', 'Convite Rápido', 'Erro: ' + (err.message || err), '—');
+          el.btnGerarRapido.disabled = false;
+        });
+    });
+  }
+
+  renderLog();
 })();
