@@ -303,7 +303,19 @@
   }
 
   // --- Gerar PDF a partir do HTML completo do template (usa iframe para manter estilos e background)
+  function getBaseUrl() {
+    var href = window.location.href.replace(/#.*$/, '').replace(/\?.*$/, '');
+    return href.indexOf('/') === -1 ? href : href.substring(0, href.lastIndexOf('/') + 1);
+  }
+
+  function resolveBackgroundUrl(html) {
+    var base = getBaseUrl();
+    var bgUrl = base + 'bg.jpg';
+    return html.replace(/url\s*\(\s*['"]?(?:\.\.\/)?bg\.jpg['"]?\s*\)/gi, 'url("' + bgUrl + '")');
+  }
+
   function htmlToPdf(fullHtml) {
+    fullHtml = resolveBackgroundUrl(fullHtml);
     return new Promise(function (resolve, reject) {
       const iframe = document.createElement('iframe');
       iframe.style.cssText = 'position:absolute;left:-9999px;width:210mm;height:297mm;';
