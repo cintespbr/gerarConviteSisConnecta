@@ -29,7 +29,7 @@ body {
 .container {
   max-width: 900px;
   margin: 0 auto;
-  padding: 2rem 1.5rem;
+  padding: 4rem 1.5rem 2rem;
 }
 
 h1 {
@@ -260,13 +260,57 @@ input[type="number"] {
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 6px;
-  max-height: 200px;
-  overflow: auto;
   font-size: 0.8rem;
   color: var(--text-muted);
 }
 
 .preview-area h4 { margin: 0 0 0.5rem 0; font-size: 0.85rem; color: var(--text); }
+
+.xlsx-record-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+
+.xlsx-record-list-header .btn-sm {
+  padding: 0.35rem 0.65rem;
+  font-size: 0.8rem;
+}
+
+.xlsx-record-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+}
+
+.xlsx-record-list li {
+  padding: 0.4rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.xlsx-record-list li:last-child { border-bottom: none; }
+
+.xlsx-record-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+
+.xlsx-record-item input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+}
 
 .template-placeholders {
   font-size: 0.85rem;
