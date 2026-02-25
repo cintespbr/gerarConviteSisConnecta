@@ -11,11 +11,19 @@
     'templateAutoridades.html': 'Convite Autoridades'
   };
 
+  // Fallback quando fetch falha (ex.: abrir index.html por file://)
+  const EMBEDDED_TEMPLATES = {
+    'templates/templateAutoridades.html': '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Ofício – Convite Sisconec.TA 2026</title><style>*{box-sizing:border-box}body{margin:0;min-height:297mm;width:210mm;font-family:Georgia,serif;padding:25mm;color:#222;font-size:12pt;line-height:1.5;background:url(\'../bg.jpg\') center/cover no-repeat}.oficio-header{font-weight:bold;margin-bottom:1.5em}.oficio-data{margin-bottom:2em}.saudacao{margin-bottom:0.5em}.destinatario{margin-bottom:1.5em}.assunto{font-weight:bold;margin-bottom:1.5em}.corpo p{margin:0 0 1em 0;text-align:justify}.url-line{text-align:right;margin-top:2em}</style></head><body><div class="oficio"><p class="oficio-header">OFÍCIO Nº36/2026 – SIsLAB/Rede SisAssistiva</p><p class="oficio-data">Uberlândia, {{data em que o convite foi gerado}}</p><p class="saudacao">Prezado {{Tratamento}}.</p><p class="destinatario">{{Nome Completo}}</p><p class="destinatario">{{Cargo}} - {{Instituição}}</p><p class="assunto">Assunto: Convite para participação no Sisconec.TA 2026</p><div class="corpo"><p>É com satisfação que o SIsLAB – Laboratório Integrador da Rede SisAssistiva em articulação com o Ministério da Ciência, Tecnologia e Inovação (MCTI), por meio da Secretaria de Ciência e Tecnologia para o Desenvolvimento Social – SEDES, convida {{Tratamento}} para participar do Sisconec.TA 2026 – Evento Nacional de Inovação Tecnológica Assistiva, que acontecerá nos dias 20 e 21 de março de 2026 na Arena Sabiazinho, localizada em Uberlândia/MG.</p><p>O Sisconec.TA 2026 será um evento voltado à apresentação das inovações apoiadas pelo Edital FINEP 2022 – Tecnologia Assistiva, com foco na articulação de parcerias e na efetiva transferência das tecnologias desenvolvidas pela Rede para a sociedade. O encontro dará visibilidade aos projetos e promoverá diálogo com agências de fomento, como a FINEP, além de representantes da indústria e do poder público, visando ampliar o acesso da população às soluções geradas no âmbito da Rede SisAssistiva.</p><p class="url-line">As inscrições deverão ser realizadas por meio do hotsite oficial do evento: https://sisconec-ta.cintespbr.org/</p></div></div></body></html>'
+  };
+
   let templateHtml = null;
   let placeholderNames = []; // campos esperados pelo template (extraídos do HTML)
   let dataRows = [];
   let currentDataSource = 'manual';
   let manualRowCount = 0;
+  const AUTO_DATE_PLACEHOLDER = 'data em que o convite foi gerado';
+  let xlsxAllRows = [];
+  let xlsxSelectedIndices = new Set();
 
   const el = {
     templateSelect: document.getElementById('templateSelect'),
@@ -28,6 +36,8 @@
     xlsxFile: document.getElementById('xlsxFile'),
     xlsxPreview: document.getElementById('xlsxPreview'),
     xlsxPreviewContent: document.getElementById('xlsxPreviewContent'),
+    xlsxRecordList: document.getElementById('xlsxRecordList'),
+    xlsxSelectAll: document.getElementById('xlsxSelectAll'),
     btnGenerate: document.getElementById('btnGenerate'),
     generateStatus: document.getElementById('generateStatus'),
     renderContainer: document.getElementById('renderContainer'),
@@ -61,10 +71,22 @@
 
     showStatus(el.templateStatus, 'Carregando template...', 'info');
     fetch(file)
-      .then(function (r) { return r.text(); })
+      .then(function (r) {
+        if (!r.ok) throw new Error('Arquivo não encontrado (' + r.status + ')');
+        return r.text();
+      })
       .then(function (html) {
+        var names = extractPlaceholders(html);
+        if (names.length === 0) {
+          // Resposta não é o template (ex.: página de erro); usar cópia embutida
+          var embedded = EMBEDDED_TEMPLATES[file];
+          if (embedded) {
+            html = embedded;
+            names = extractPlaceholders(embedded);
+          }
+        }
         templateHtml = html;
-        placeholderNames = extractPlaceholders(html);
+        placeholderNames = names;
         showStatus(el.templateStatus, 'Template carregado. Campos: ' + placeholderNames.join(', '), 'success');
         el.templatePlaceholders.textContent = 'Campos esperados: ' + placeholderNames.join(', ');
         el.templatePlaceholders.classList.remove('hide');
@@ -74,18 +96,36 @@
         updateGenerateButton();
       })
       .catch(function (err) {
-        templateHtml = null;
-        placeholderNames = [];
-        showStatus(el.templateStatus, 'Erro ao carregar template: ' + (err.message || err), 'error');
-        el.manualFieldsContainer.innerHTML = '<p class="template-placeholders">Selecione um template para exibir os campos.</p>';
-        el.manualActions.classList.add('hide');
-        updateGenerateButton();
+        var embedded = EMBEDDED_TEMPLATES[file];
+        if (embedded) {
+          templateHtml = embedded;
+          placeholderNames = extractPlaceholders(embedded);
+          showStatus(el.templateStatus, 'Template carregado (cópia local). Campos: ' + placeholderNames.join(', '), 'success');
+          el.templatePlaceholders.textContent = 'Campos esperados: ' + placeholderNames.join(', ');
+          el.templatePlaceholders.classList.remove('hide');
+          el.dataSourceHint.classList.add('hide');
+          manualRowCount = 0;
+          buildManualForm();
+          updateGenerateButton();
+        } else {
+          templateHtml = null;
+          placeholderNames = [];
+          showStatus(el.templateStatus, 'Erro ao carregar template: ' + (err.message || err), 'error');
+          el.manualFieldsContainer.innerHTML = '<p class="template-placeholders">Selecione um template para exibir os campos.</p>';
+          el.manualActions.classList.add('hide');
+          updateGenerateButton();
+        }
       });
   });
 
-  // --- Montar formulário manual: um bloco por convite, com um input por placeholder
+  // --- Montar formulário manual: um bloco por convite, com um input por placeholder (exceto data automática)
+  function getPlaceholdersForForm() {
+    return placeholderNames.filter(function (n) { return n !== AUTO_DATE_PLACEHOLDER; });
+  }
+
   function buildManualForm() {
-    if (!placeholderNames.length) return;
+    var namesForForm = getPlaceholdersForForm();
+    if (!namesForForm.length) return;
     el.manualFieldsContainer.innerHTML = '';
     el.manualActions.classList.remove('hide');
 
@@ -96,6 +136,7 @@
   }
 
   function appendManualRow(index) {
+    var namesForForm = getPlaceholdersForForm();
     const row = document.createElement('div');
     row.className = 'manual-row';
     row.setAttribute('data-row-index', index);
@@ -105,7 +146,7 @@
 
     const grid = document.createElement('div');
     grid.className = 'field-grid';
-    placeholderNames.forEach(function (name) {
+    namesForForm.forEach(function (name) {
       const field = document.createElement('div');
       field.className = 'field';
       const lbl = document.createElement('label');
@@ -204,8 +245,11 @@
   el.xlsxFile.addEventListener('change', function () {
     const file = this.files[0];
     if (!file) {
+      xlsxAllRows = [];
+      xlsxSelectedIndices.clear();
       dataRows = [];
       el.xlsxPreview.style.display = 'none';
+      if (el.xlsxRecordList) el.xlsxRecordList.innerHTML = '';
       updateGenerateButton();
       return;
     }
@@ -217,37 +261,114 @@
         const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
         const json = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
         if (json.length < 2) {
+          xlsxAllRows = [];
+          xlsxSelectedIndices.clear();
           dataRows = [];
           el.xlsxPreviewContent.textContent = 'Planilha vazia ou sem dados (mínimo: cabeçalho + 1 linha).';
           el.xlsxPreview.style.display = 'block';
+          if (el.xlsxRecordList) el.xlsxRecordList.innerHTML = '';
         } else {
           const headers = json[0].map(function (h) { return String(h || '').trim() || 'Coluna'; });
-          dataRows = json.slice(1).map(function (row) {
+          xlsxAllRows = json.slice(1).map(function (row) {
             const obj = {};
             headers.forEach(function (h, i) {
               obj[h] = row[i] != null ? String(row[i]).trim() : '';
             });
             return obj;
           });
-          el.xlsxPreviewContent.textContent = 'Colunas: ' + headers.join(', ') + '\n\nLinhas: ' + dataRows.length + '\n\nPrimeira linha: ' + JSON.stringify(dataRows[0] || {}, null, 2);
+          xlsxSelectedIndices.clear();
+          for (var i = 0; i < xlsxAllRows.length; i++) xlsxSelectedIndices.add(i);
+          el.xlsxPreviewContent.textContent = 'Colunas: ' + headers.join(', ') + '\n\nTotal de linhas: ' + xlsxAllRows.length;
           el.xlsxPreview.style.display = 'block';
-        }
-        updateGenerateButton();
-      } catch (err) {
+          buildXlsxRecordList();
+      updateDataRowsFromXlsxSelection();
+    }
+    updateGenerateButton();
+    updateXlsxSelectAllLabel();
+  } catch (err) {
+        xlsxAllRows = [];
+        xlsxSelectedIndices.clear();
         dataRows = [];
         el.xlsxPreviewContent.textContent = 'Erro: ' + (err.message || err);
         el.xlsxPreview.style.display = 'block';
+        if (el.xlsxRecordList) el.xlsxRecordList.innerHTML = '';
         updateGenerateButton();
       }
     };
     reader.readAsArrayBuffer(file);
   });
 
+  function updateDataRowsFromXlsxSelection() {
+    if (currentDataSource !== 'xlsx') return;
+    dataRows = xlsxAllRows.filter(function (_, i) { return xlsxSelectedIndices.has(i); });
+  }
+
+  function buildXlsxRecordList() {
+    if (!el.xlsxRecordList) return;
+    el.xlsxRecordList.innerHTML = '';
+    xlsxAllRows.forEach(function (row, i) {
+      var nome = getValueForPlaceholder(row, 'Nome Completo');
+      if (!nome || nome.trim() === '') nome = 'Convite ' + (i + 1);
+      var li = document.createElement('li');
+      var label = document.createElement('label');
+      label.className = 'xlsx-record-item';
+      var cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = xlsxSelectedIndices.has(i);
+      cb.setAttribute('data-xlsx-index', i);
+      cb.addEventListener('change', function () {
+        var idx = parseInt(this.getAttribute('data-xlsx-index'), 10);
+        if (this.checked) xlsxSelectedIndices.add(idx);
+        else xlsxSelectedIndices.delete(idx);
+        updateDataRowsFromXlsxSelection();
+        updateGenerateButton();
+      });
+      label.appendChild(cb);
+      label.appendChild(document.createTextNode(' ' + nome));
+      li.appendChild(label);
+      el.xlsxRecordList.appendChild(li);
+    });
+    updateXlsxSelectAllLabel();
+  }
+
+  if (el.xlsxSelectAll) {
+    el.xlsxSelectAll.addEventListener('click', function () {
+      var allSelected = xlsxAllRows.length > 0 && xlsxSelectedIndices.size === xlsxAllRows.length;
+      if (allSelected) {
+        xlsxSelectedIndices.clear();
+      } else {
+        xlsxSelectedIndices.clear();
+        for (var i = 0; i < xlsxAllRows.length; i++) xlsxSelectedIndices.add(i);
+      }
+      buildXlsxRecordList();
+      updateDataRowsFromXlsxSelection();
+      updateGenerateButton();
+    });
+  }
+
+  function updateXlsxSelectAllLabel() {
+    if (!el.xlsxSelectAll) return;
+    var allSelected = xlsxAllRows.length > 0 && xlsxSelectedIndices.size === xlsxAllRows.length;
+    el.xlsxSelectAll.textContent = allSelected ? 'Desmarcar todos' : 'Selecionar todos';
+  }
+
   function updateGenerateButton() {
     if (currentDataSource === 'manual') collectManualData();
+    else if (currentDataSource === 'xlsx') updateDataRowsFromXlsxSelection();
     const hasTemplate = !!templateHtml;
     const hasData = dataRows.length > 0;
     el.btnGenerate.disabled = !hasTemplate || !hasData;
+    updateGenerateButtonLabel();
+    if (currentDataSource === 'xlsx') updateXlsxSelectAllLabel();
+  }
+
+  function updateGenerateButtonLabel() {
+    if (!el.btnGenerate) return;
+    if (currentDataSource === 'xlsx' && dataRows.length > 0) {
+      el.btnGenerate.textContent = 'Gerar selecionados (' + dataRows.length + ') e baixar .zip';
+    } else {
+      el.btnGenerate.textContent = 'Gerar convites (PDF) e baixar .zip';
+    }
   }
 
   // --- Normalizar nome para comparação (maiúsculas, sem acentos)
@@ -260,8 +381,19 @@
       .replace(/[\u0300-\u036f]/g, '');
   }
 
+  function formatDate(d) {
+    var day = ('0' + d.getDate()).slice(-2);
+    var month = ('0' + (d.getMonth() + 1)).slice(-2);
+    return day + '/' + month + '/' + d.getFullYear();
+  }
+
   // --- Obter valor do row para um placeholder (aceita chave com nome diferente na planilha)
   function getValueForPlaceholder(row, placeholderName) {
+    if (placeholderName === AUTO_DATE_PLACEHOLDER) {
+      var v = row[placeholderName];
+      if (v === undefined || v === null || String(v).trim() === '') return formatDate(new Date());
+      return v;
+    }
     var val = row[placeholderName];
     if (val !== undefined && val !== null) return val;
     var normPlaceholder = normalizeKey(placeholderName);
