@@ -51,6 +51,7 @@
       margin: 8px 12px 8px 0; 
     }
     .btn-primary   { background: #2980b9; color: white; }
+    .btn-secondary { background: #95a5a6; color: white; }
     .btn-success   { background: #27ae60; color: white; }
     .btn-warning   { background: #e67e22; color: white; }
     .btn-purple    { background: #8e44ad; color: white; }
@@ -194,6 +195,12 @@
   <!-- Aba 3: Log & Pendências -->
   <div id="log" class="tab-content hidden">
     <h2>Registro de Gerações & Pendências</h2>
+    <p style="color:#7f8c8d; margin-bottom:1rem;">Exporte o log em planilha para guardar ou compartilhar. Carregue uma planilha exportada para restaurar o registro nesta sessão.</p>
+    <div style="margin-bottom:1rem;">
+      <button type="button" class="btn-primary" id="logExportXlsx">Exportar log (xlsx)</button>
+      <input type="file" id="logImportFile" accept=".xlsx,.xls,.csv" style="display:none;">
+      <button type="button" class="btn-secondary" id="logImportBtn">Carregar planilha de convites gerados</button>
+    </div>
     <table>
       <thead>
         <tr>

@@ -8,6 +8,7 @@
   const AUTO_DATE_PLACEHOLDER = 'data em que o convite foi gerado';
   const isV2 = window.location.pathname.indexOf('/v2') !== -1;
   const assetPrefix = isV2 ? '../' : '';
+  const LOG_STORAGE_KEY = 'geradorConvites_log';
 
   var EMBEDDED_TEMPLATE = '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"/><title>Ofício – Sisconec.TA 2026</title><style>*{box-sizing:border-box}body{margin:0;min-height:297mm;width:210mm;font-family:Georgia,serif;padding:25mm;color:#222;font-size:12pt;line-height:1.5}.oficio-header{font-weight:bold;margin-bottom:1.5em}.oficio-data{margin-bottom:2em}.saudacao{margin-bottom:0.5em}.destinatario{margin-bottom:1.5em}.assunto{font-weight:bold;margin-bottom:1.5em}.corpo p{margin:0 0 1em 0;text-align:justify}.url-line{text-align:right;margin-top:2em}</style></head><body><div class="oficio"><p class="oficio-header">OFÍCIO Nº36/2026 – SIsLAB/Rede SisAssistiva</p><p class="oficio-data">Uberlândia, {{data em que o convite foi gerado}}</p><p class="saudacao">Prezado {{Tratamento}}.</p><p class="destinatario">{{Nome Completo}} <br><i> {{Cargo}} - {{Instituição}}</i></p><p class="assunto">Assunto: Convite para participação no Sisconec.TA 2026</p><div class="corpo"><p>É com satisfação que o SIsLAB – Laboratório Integrador da Rede SisAssistiva em articulação com o Ministério da Ciência, Tecnologia e Inovação (MCTI), por meio da Secretaria de Ciência e Tecnologia para o Desenvolvimento Social – SEDES, convida {{Tratamento}} para participar do Sisconec.TA 2026 – Evento Nacional de Inovação Tecnológica Assistiva, que acontecerá nos dias 20 e 21 de março de 2026 na Arena Sabiazinho, localizada em Uberlândia/MG.</p><p>O Sisconec.TA 2026 será um evento voltado à apresentação das inovações apoiadas pelo Edital FINEP 2022 – Tecnologia Assistiva, com foco na articulação de parcerias e na efetiva transferência das tecnologias desenvolvidas pela Rede para a sociedade.</p><p class="url-line">As inscrições deverão ser realizadas por meio do hotsite oficial do evento: https://sisconec-ta.cintespbr.org/</p></div></div></body></html>';
 
@@ -33,6 +34,9 @@
     rapidoPreviewIframeWrap: document.getElementById('rapidoPreviewIframeWrap'),
     rapidoPreviewIframe: document.getElementById('rapidoPreviewIframe'),
     logTableBody: document.getElementById('logTableBody'),
+    logExportXlsx: document.getElementById('logExportXlsx'),
+    logImportFile: document.getElementById('logImportFile'),
+    logImportBtn: document.getElementById('logImportBtn'),
   };
 
   let rapidoTemplateHtml = null;
@@ -223,6 +227,106 @@
       arquivo: arquivo || '—'
     });
     renderLog();
+    saveLogToStorage();
+  }
+
+  function saveLogToStorage() {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(LOG_STORAGE_KEY, JSON.stringify(logEntries));
+      }
+    } catch (e) {}
+  }
+
+  function loadLogFromStorage() {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      var raw = localStorage.getItem(LOG_STORAGE_KEY);
+      if (!raw) return;
+      var arr = JSON.parse(raw);
+      if (Array.isArray(arr) && arr.length > 0) {
+        logEntries = arr;
+        renderLog();
+      }
+    } catch (e) {}
+  }
+
+  function exportLogToXlsx() {
+    if (logEntries.length === 0) {
+      alert('Não há registros para exportar.');
+      return;
+    }
+    var rows = logEntries.map(function (e) {
+      return {
+        'Data/Hora': e.dt,
+        'ID / Nome': e.idNome,
+        'Modelo': e.modelo,
+        'Status': e.status,
+        'Arquivo': e.arquivo
+      };
+    });
+    var ws = XLSX.utils.json_to_sheet(rows);
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Convites gerados');
+    XLSX.writeFile(wb, 'convites-gerados.xlsx');
+  }
+
+  function importLogFromFile(file, callback) {
+    if (!file) return;
+    var name = (file.name || '').toLowerCase();
+    if (name.endsWith('.csv')) {
+      var reader = new FileReader();
+      reader.onload = function () {
+        try {
+          var text = reader.result;
+          var lines = text.split(/\r?\n/).filter(function (l) { return l.trim(); });
+          if (lines.length < 2) { callback(new Error('CSV precisa de cabeçalho e ao menos uma linha')); return; }
+          var headers = lines[0].split(',').map(function (h) { return h.trim().replace(/^"|"$/g, ''); });
+          var arr = lines.slice(1).map(function (line) {
+            var vals = line.split(',').map(function (v) { return (v || '').trim().replace(/^"|"$/g, ''); });
+            var row = {};
+            headers.forEach(function (h, i) { row[h] = vals[i] != null ? vals[i] : ''; });
+            return {
+              dt: row['Data/Hora'] || row['Data'] || '',
+              idNome: row['ID / Nome'] || row['ID/Nome'] || row['ID Nome'] || '',
+              modelo: row['Modelo'] || '',
+              status: row['Status'] || '',
+              arquivo: row['Arquivo'] || '—'
+            };
+          });
+          logEntries = arr;
+          saveLogToStorage();
+          renderLog();
+          callback(null);
+        } catch (e) { callback(e); }
+      };
+      reader.readAsText(file, 'UTF-8');
+      return;
+    }
+    var reader = new FileReader();
+    reader.onload = function (e) {
+      try {
+        var data = new Uint8Array(e.target.result);
+        var workbook = XLSX.read(data, { type: 'array' });
+        var sheet = workbook.Sheets[workbook.SheetNames[0]];
+        var json = XLSX.utils.sheet_to_json(sheet);
+        if (!json.length) { callback(new Error('Planilha vazia')); return; }
+        logEntries = json.map(function (row) {
+          var get = function (key) { return row[key] != null ? String(row[key]).trim() : ''; };
+          return {
+            dt: get('Data/Hora') || get('Data'),
+            idNome: get('ID / Nome') || get('ID/Nome') || get('ID Nome'),
+            modelo: get('Modelo'),
+            status: get('Status'),
+            arquivo: get('Arquivo') || '—'
+          };
+        });
+        saveLogToStorage();
+        renderLog();
+        callback(null);
+      } catch (err) { callback(err); }
+    };
+    reader.readAsArrayBuffer(file);
   }
 
   function renderLog() {
@@ -636,5 +740,21 @@
     });
   }
 
+  if (el.logExportXlsx) {
+    el.logExportXlsx.addEventListener('click', exportLogToXlsx);
+  }
+  if (el.logImportBtn && el.logImportFile) {
+    el.logImportBtn.addEventListener('click', function () { el.logImportFile.click(); });
+    el.logImportFile.addEventListener('change', function () {
+      var file = this.files[0];
+      this.value = '';
+      if (!file) return;
+      importLogFromFile(file, function (err) {
+        if (err) alert('Erro ao carregar planilha: ' + (err.message || err));
+      });
+    });
+  }
+
+  loadLogFromStorage();
   renderLog();
 })();
