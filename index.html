@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gerador de Convites</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="container">
+    <h1>Gerador de Convites</h1>
+    <p class="subtitle">Escolha o template, informe os dados manualmente ou por planilha .xlsx e gere os PDFs em um .zip.</p>
+
+    <div class="card">
+      <h2>1. Template</h2>
+      <label for="templateSelect">Selecione o modelo de convite</label>
+      <select id="templateSelect">
+        <option value="">— Selecione um template —</option>
+        <option value="templates/templateAutoridades.html">Convite Autoridades</option>
+      </select>
+      <div id="templateStatus" class="status"></div>
+      <div id="templatePlaceholders" class="template-placeholders hide"></div>
+    </div>
+
+    <div class="card" id="cardDataSource">
+      <h2>2. Fonte de dados</h2>
+      <p id="dataSourceHint" class="template-placeholders hide">Selecione um template acima para liberar os campos.</p>
+      <div class="tabs" id="dataSourceTabs">
+        <button type="button" class="tab active" data-tab="manual">Preencher manualmente</button>
+        <button type="button" class="tab" data-tab="xlsx">Planilha .xlsx</button>
+      </div>
+
+      <div id="tab-manual" class="tab-content active">
+        <div id="manualFieldsContainer">
+          <p class="template-placeholders">Selecione um template para exibir os campos.</p>
+        </div>
+        <div class="actions hide" id="manualActions">
+          <button type="button" class="btn btn-secondary" id="addManualRow">+ Adicionar outro convite</button>
+        </div>
+      </div>
+
+      <div id="tab-xlsx" class="tab-content">
+        <label for="xlsxFile">Planilha com uma linha de cabeçalho (nomes das colunas iguais aos campos do template) e uma linha por convite.</label>
+        <input type="file" id="xlsxFile" accept=".xlsx,.xls" />
+        <div id="xlsxPreview" class="preview-area" style="display:none;"><h4>Dados carregados</h4><pre id="xlsxPreviewContent"></pre></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>3. Gerar convites</h2>
+      <p style="margin: 0 0 1rem 0; color: var(--text-muted); font-size: 0.9rem;">Gera um PDF para cada convite e faz o download de um .zip.</p>
+      <div class="actions">
+        <button type="button" class="btn btn-primary" id="btnGenerate" disabled>Gerar convites (PDF) e baixar .zip</button>
+      </div>
+      <div id="generateStatus" class="status"></div>
+    </div>
+  </div>
+
+  <div id="renderContainer" style="position:absolute; left: -9999px; width: 210mm; min-height: 297mm; background: #fff; box-sizing: border-box;"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
