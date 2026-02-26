@@ -625,7 +625,6 @@
     }
     el.rapidoFieldsContainer.innerHTML = '';
     names.forEach(function (name) {
-      var isTratamento = name === 'Tratamento';
       var div = document.createElement('div');
       div.style.marginBottom = '14px';
       var label = document.createElement('label');
@@ -635,15 +634,12 @@
       label.style.fontSize = '0.875rem';
       label.style.color = '#7f8c8d';
       div.appendChild(label);
-      var input;
-      if (isTratamento) {
-        input = document.createElement('select');
-        input.innerHTML = '<option>Sr(a).</option><option>Prof.</option><option selected>Profa.</option><option>Dr(a).</option><option>Ministro(a)</option><option>Diretor(a)</option>';
-      } else {
-        input = document.createElement('input');
-        input.type = 'text';
-        input.placeholder = 'Ex: ' + (name === 'Nome Completo' ? 'Prof. João da Silva' : name === 'Instituição' ? 'FINEP' : name === 'Cargo' ? 'Coordenador de Inovação' : '');
-      }
+      var input = document.createElement('input');
+      input.type = 'text';
+      input.placeholder = 'Ex: ' + (name === 'Nome Completo' ? 'Prof. João da Silva' :
+        name === 'Instituição' ? 'FINEP' :
+        name === 'Cargo' ? 'Coordenador de Inovação' :
+        name === 'Tratamento' ? 'Profa.' : '');
       input.setAttribute('data-field', name);
       input.style.width = '100%';
       input.style.maxWidth = '420px';
