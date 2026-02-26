@@ -25,6 +25,9 @@
     btnGerarSelecionados: document.getElementById('btnGerarSelecionados'),
     btnBaixarZip: document.getElementById('btnBaixarZip'),
     loteSelectAll: document.getElementById('loteSelectAll'),
+    loteTemplateSelect: document.getElementById('loteTemplateSelect'),
+    loteOficioInicio: document.getElementById('loteOficioInicio'),
+    loteAno: document.getElementById('loteAno'),
     loteTableBody: document.getElementById('loteTableBody'),
     rapidoTemplateSelect: document.getElementById('rapidoTemplateSelect'),
     rapidoTemplateStatus: document.getElementById('rapidoTemplateStatus'),
@@ -58,13 +61,30 @@
     });
   });
 
-  // --- Carregar template (Modelo 02 – Autoridades)
-  function loadTemplate(callback) {
-    if (templateHtml) {
-      callback(null, templateHtml);
-      return;
+  function getLoteTemplatePath() {
+    if (el.loteTemplateSelect && el.loteTemplateSelect.value)
+      return el.loteTemplateSelect.value;
+    return 'templates/templateAutoridades.html';
+  }
+
+  function getLoteOficioInicio() {
+    if (!el.loteOficioInicio) return null;
+    var v = parseInt(el.loteOficioInicio.value, 10);
+    return isNaN(v) ? null : v;
+  }
+
+  function getLoteAno() {
+    if (el.loteAno && el.loteAno.value) {
+      var v = parseInt(el.loteAno.value, 10);
+      if (!isNaN(v)) return v;
     }
-    var url = assetPrefix + 'templates/templateAutoridades.html';
+    return new Date().getFullYear();
+  }
+
+  // --- Carregar template (para Lote, baseado no select)
+  function loadTemplate(callback) {
+    var path = getLoteTemplatePath();
+    var url = assetPrefix + path;
     fetch(url)
       .then(function (r) {
         if (!r.ok) throw new Error('Template não encontrado');
@@ -75,7 +95,7 @@
         callback(null, html);
       })
       .catch(function (err) {
-        if (EMBEDDED_TEMPLATE) {
+        if (EMBEDDED_TEMPLATE && path.indexOf('templateAutoridades') !== -1) {
           templateHtml = EMBEDDED_TEMPLATE;
           callback(null, EMBEDDED_TEMPLATE);
         } else {
@@ -235,7 +255,7 @@
       if (typeof localStorage !== 'undefined') {
         localStorage.setItem(LOG_STORAGE_KEY, JSON.stringify(logEntries));
       }
-    } catch (e) {}
+    } catch (e) { }
   }
 
   function loadLogFromStorage() {
@@ -248,7 +268,7 @@
         logEntries = arr;
         renderLog();
       }
-    } catch (e) {}
+    } catch (e) { }
   }
 
   function exportLogToXlsx() {
@@ -418,7 +438,7 @@
     el.loteTableBody.innerHTML = '';
     if (loteRows.length === 0) {
       var tr = document.createElement('tr');
-      tr.innerHTML = '<td colspan="8" style="color:#7f8c8d;">Carregue uma planilha para exibir os convidados.</td>';
+      tr.innerHTML = '<td colspan="6" style="color:#7f8c8d;">Carregue uma planilha para exibir os convidados.</td>';
       el.loteTableBody.appendChild(tr);
       return;
     }
@@ -431,7 +451,6 @@
       var nome = getValue(item.row, 'Nome Completo') || getValue(item.row, 'Nome') || '';
       var tratamento = getValue(item.row, 'Tratamento') || '';
       var instituicao = getValue(item.row, 'Instituição') || '';
-      var categoria = getValue(item.row, 'Categoria') || '';
       var cb = document.createElement('input');
       cb.type = 'checkbox';
       cb.checked = item.selected;
@@ -439,21 +458,14 @@
         item.selected = cb.checked;
         updateSelectAllState();
       });
-      var sel = document.createElement('select');
-      sel.innerHTML = '<option value="1">Modelo 01 – Padrão</option><option value="2" selected>Modelo 02 – Autoridades</option><option value="3">Modelo 03 – Rede</option>';
-      sel.value = item.modelo;
-      sel.addEventListener('change', function () { item.modelo = sel.value; });
       tr.innerHTML =
         '<td></td>' +
         '<td>' + escapeHtml(item.id) + '</td>' +
         '<td>' + escapeHtml(nome) + '</td>' +
         '<td>' + escapeHtml(tratamento) + '</td>' +
         '<td>' + escapeHtml(instituicao) + '</td>' +
-        '<td>' + escapeHtml(categoria) + '</td>' +
-        '<td></td>' +
         '<td class="status-pendente">' + escapeHtml(item.status) + '</td>';
       tr.querySelector('td').appendChild(cb);
-      tr.querySelectorAll('td')[6].appendChild(sel);
       el.loteTableBody.appendChild(tr);
     });
   }
@@ -503,6 +515,8 @@
       if (done) done();
       return;
     }
+    var inicioOficio = getLoteOficioInicio();
+    var anoOficio = getLoteAno();
     loadTemplate(function (err, html) {
       if (err) {
         alert('Erro ao carregar template: ' + (err.message || err));
@@ -522,7 +536,7 @@
             rows.forEach(function (item) {
               item.status = 'Gerado';
               var nome = getValue(item.row, 'Nome Completo') || getValue(item.row, 'Nome') || item.id;
-              addLog(item.id + ' – ' + nome, 'Modelo ' + item.modelo, 'Gerado com sucesso', 'Convite_' + item.id + '.pdf');
+              addLog(item.id + ' – ' + nome, 'Modelo de convite', 'Gerado com sucesso', 'Convite_' + item.id + '.pdf');
             });
             renderLoteTable();
             if (done) done();
@@ -531,6 +545,10 @@
         }
         var item = rows[next];
         var data = rowToTemplateData(item.row);
+        if (inicioOficio != null) {
+          data['Oficio'] = String(inicioOficio + next);
+        }
+        data['Ano'] = String(anoOficio);
         var filled = fillTemplate(html, data);
         htmlToPdf(filled)
           .then(function (buf) {
@@ -548,7 +566,7 @@
             doOne();
           })
           .catch(function (err) {
-            addLog(item.id, 'Modelo ' + item.modelo, 'Erro: ' + (err.message || err), '—');
+            addLog(item.id, 'Modelo de convite', 'Erro: ' + (err.message || err), '—');
             item.status = 'Erro';
             next++;
             doOne();

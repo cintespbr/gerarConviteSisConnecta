@@ -135,6 +135,23 @@
     <button type="button" class="btn-warning" id="btnGerarSelecionados">Gerar Selecionados (PDF)</button>
     <button type="button" class="btn-primary" id="btnBaixarZip">Baixar ZIP com todos os PDFs</button>
 
+    <div style="margin-top:1rem; display:flex; flex-wrap:wrap; gap:1.5rem; align-items:flex-end;">
+      <div>
+        <label for="loteTemplateSelect">2. Modelo de convite (para todos os selecionados):</label>
+        <select id="loteTemplateSelect">
+          <option value="templates/templateAutoridades.html">Modelo 02 – Autoridades e parceiros estratégicos</option>
+        </select>
+      </div>
+      <div>
+        <label for="loteOficioInicio">3. Ofício inicia em</label>
+        <input type="number" id="loteOficioInicio" min="1" step="1" style="max-width: 140px;" />
+      </div>
+      <div>
+        <label for="loteAno">Ano do ofício</label>
+        <input type="number" id="loteAno" min="2000" max="2100" style="max-width: 140px;" />
+      </div>
+    </div>
+
     <h3>Convidados carregados</h3>
     <table>
       <thead>
@@ -144,14 +161,12 @@
           <th>Nome</th>
           <th>Tratamento</th>
           <th>Instituição</th>
-          <th>Categoria</th>
-          <th>Modelo</th>
           <th>Status</th>
         </tr>
       </thead>
       <tbody id="loteTableBody">
         <tr>
-          <td colspan="8" style="color:#7f8c8d;">Carregue uma planilha para exibir os convidados.</td>
+          <td colspan="6" style="color:#7f8c8d;">Carregue uma planilha para exibir os convidados.</td>
         </tr>
       </tbody>
     </table>
