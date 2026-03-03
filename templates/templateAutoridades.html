@@ -3,6 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- Importação da fonte Poppins -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -64,7 +66,9 @@
 
   <body>
     <div class="oficio">
-      <p class="oficio-header">OFÍCIO Nº36/2026 – SIsLAB/Rede SisAssistiva</p>
+      <p class="oficio-header">
+        OFÍCIO Nº{{Oficio}}/{{Ano}} – SIsLAB/Rede SisAssistiva
+      </p>
       <p class="oficio-data">
         Uberlândia, {{data em que o convite foi gerado}}
       </p>
@@ -72,6 +76,11 @@
       <p class="saudacao">Prezado {{Tratamento}}.</p>
       <p class="destinatario">
         {{Nome Completo}} <br /><i> {{Cargo}} - {{Instituição}}</i>
+      </p>
+      <p class="saudacao">{{Tratamento}}.</p>
+      <p class="destinatario">
+        {{Nome Completo}} <br />
+        {{Cargo}} - {{Instituição}}
       </p>
 
       <p class="assunto">
